@@ -1,16 +1,16 @@
 #include "../include/pose2odom/pose2odom.hpp"
 
-Pose2Odom::Pose2Odom()(const std::string &name_space, const rclcpp::NodeOptions &options) : Node("pose2odom", name_space, options)
+Pose2Odom::Pose2Odom(const std::string &name_space, const rclcpp::NodeOptions &options) : Node("pose2odom", name_space, options)
 {
     this->declare_parameter<std::string>("input_topic", "/pose_with_covariance");
     this->declare_parameter<std::string>("output_topic", "/odom");
     this->declare_parameter<std::string>("odom_frame_id", "odom");
     this->declare_parameter<std::string>("child_frame_id", "base_link");
 
-    input_topic_ = this->get_parameter("input_topic").as_string();
-    output_topic_ = this->get_parameter("output_topic").as_string();
-    odom_frame_id_ = this->get_parameter("odom_frame_id").as_string();
-    child_frame_id_ = this->get_parameter("child_frame_id").as_string();
+    _input_topic = this->get_parameter("input_topic").as_string();
+    _output_topic = this->get_parameter("output_topic").as_string();
+    _odom_frame_id = this->get_parameter("odom_frame_id").as_string();
+    _child_frame_id = this->get_parameter("child_frame_id").as_string();
 
     _initialized = false;
 
@@ -18,36 +18,36 @@ Pose2Odom::Pose2Odom()(const std::string &name_space, const rclcpp::NodeOptions 
     _sub = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
         _input_topic, 
         10,
-        std::bind(&PoseToOdom::pose_callback, this, std::placeholders::_1));
+        std::bind(&Pose2Odom::pose_callback, this, std::placeholders::_1));
 }
 
 void Pose2Odom::pose_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
 {
     nav_msgs::msg::Odometry odom;
     odom.header = msg->header;
-    odom.header.frame_id = odom_frame_id_;
-    odom.child_frame_id = child_frame_id_;
+    odom.header.frame_id = _odom_frame_id;
+    odom.child_frame_id = _child_frame_id;
 
     odom.pose.pose = msg->pose.pose;
     odom.pose.covariance = msg->pose.covariance;
 
-    if (!initialized_)
+    if (!_initialized)
     {
       zero_twist(odom);
-      last_msg_ = *msg;
-      last_time_ = msg->header.stamp;
-      initialized_ = true;
+      _last_msg = *msg;
+      _last_time = msg->header.stamp;
+      _initialized = true;
     }
     else
     {
       rclcpp::Time now = msg->header.stamp;
-      double dt = (now - last_time_).seconds();
+      double dt = (now - _last_time).seconds();
       if (dt <= 0.0) dt = 1e-6;
 
-      double dx = msg->pose.pose.position.x  - last_msg_.pose.pose.position.x;
-      double dy = msg->pose.pose.position.y  - last_msg_.pose.pose.position.y;
+      double dx = msg->pose.pose.position.x  - _last_msg.pose.pose.position.x;
+      double dy = msg->pose.pose.position.y  - _last_msg.pose.pose.position.y;
 
-      double yaw_prev = get_yaw(last_msg_.pose.pose.orientation);
+      double yaw_prev = get_yaw(_last_msg.pose.pose.orientation);
       double yaw_curr = get_yaw(msg->pose.pose.orientation);
       double dyaw = shortest_angular_distance(yaw_prev, yaw_curr);
 
@@ -60,11 +60,11 @@ void Pose2Odom::pose_callback(const geometry_msgs::msg::PoseWithCovarianceStampe
 
       for (auto &c : odom.twist.covariance) c = 0.0;
 
-      last_msg_ = *msg;
-      last_time_ = now;
+      _last_msg = *msg;
+      _last_time = now;
     }
 
-    pub_->publish(odom);
+    _pub->publish(odom);
 }
 
 void Pose2Odom::zero_twist(nav_msgs::msg::Odometry &odom)
