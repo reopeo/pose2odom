@@ -22,4 +22,9 @@ ament_target_dependencies(pose2odom
   geometry_msgs
 )
 
+install(TARGETS
+  pose2odom
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
